@@ -1,0 +1,196 @@
+﻿using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+public class invenItemMove : MonoBehaviour, IPointerDownHandler, IDragHandler, IEndDragHandler
+{
+    
+    [SerializeField]
+    Inventory inventory;
+
+    [SerializeField]
+    Transform _targetTr; // 이동될 UI
+
+    [SerializeField]    // 인벤토리 Rect
+    RectTransform _inventotyRectransform;
+
+    [Tooltip("아이템 버리기 갯수 질문 창")]
+    [SerializeField]
+    CanvasGroup _dropItemCV;
+    [SerializeField]
+    InputField _dropNumber;
+    [SerializeField]
+    Button _dropOkBtn;
+
+    Rect _inventoryRect;
+
+    Vector2 _beginPoint;
+    Vector2 _moveBegin;
+
+    bool leftClick = false;
+
+    int idx = 0;
+    int dropCount = 1;
+    bool _none = true;
+    int itemType = 1;
+    Transform _curParent;
+
+    void Awake()
+    {
+        _inventoryRect = _inventotyRectransform.rect;       // 인벤토리 rect
+        _curParent = transform.parent.transform;        // 부모 객체
+
+        // 이동 대상 UI를 지정하지 않은 경우, 자동으로 부모로 초기화
+        if (_targetTr == null)
+            _targetTr = transform;
+    }
+
+    void Start()
+    {
+        _dropOkBtn.onClick.AddListener(() => _dropOk(dropCount));
+    }
+    void Update()
+    {
+
+    }
+    #region 마우스 이벤트
+    // 드래그 시작 위치 지정
+    void IPointerDownHandler.OnPointerDown(PointerEventData eventData)
+    {
+        // 현재 인덱스
+        idx = getindex();
+
+        // 빈칸인지 확인
+        _none = UI_Manager.instance.check_empty_idx_item(idx);
+        if (_none) return;
+
+
+        // 작동 시작
+        if (Input.GetMouseButtonDown(0))        // 좌클
+        {
+            leftClick = true;
+            _beginPoint = _targetTr.position;       // 움직이게
+            _moveBegin = eventData.position;    // 실시간 좌표 반영
+            _targetTr.SetParent(_curParent.parent);  // 맨 앞으로 보이게 만들기 위해 우선 부모 객체 위치를 바꿈
+        }
+
+        else if (Input.GetMouseButtonDown(1))   // 우클
+        {
+            leftClick = false;
+            List<object> itemData = csvReader.itemData[csvReader.itemIndexPairs[inventory.itemIndexs[idx]]];
+            itemType = (int)itemData[csvReader.itemHeaderPairs["itemType"]];
+
+            if (itemType == 1)
+            {
+                Debug.Log("장착 아이템 로직");
+            }
+
+            else if (itemType == 2)     // 소비 아이템 : 체력 회복: 마나 회복
+            {
+                Debug.Log("소비 아이템 로직");
+                // 수치 값 조정
+                Data_Manager.instance.use_cunsomable_item(
+                    (int)itemData[csvReader.itemHeaderPairs["HPUP"]],
+                     (int)itemData[csvReader.itemHeaderPairs["MPUP"]],
+                     idx
+                    );
+
+                // ui 갱신: hp, mp
+                UI_Manager.instance.update_hp_mp();
+
+                // ui 갱신 2: 아이템 갯수
+                UI_Manager.instance.update_cunsomable_unit_UI(idx);
+            }
+
+            /*
+             *  자동 사용 아이템 자동 사용 적용
+             *  나머지 아이템 ㄴㄴ
+             */
+        }
+    }
+
+    // 드래그 : 마우스 커서 위치로 이동
+    void IDragHandler.OnDrag(PointerEventData eventData)
+    {
+        // 우클릭이라면
+        if (_none || !leftClick)
+        {
+            return;
+        }
+        else
+        {
+            _targetTr.position = _beginPoint + (eventData.position - _moveBegin);
+        }
+
+    }
+
+    // 드래그 종료시
+    public void OnEndDrag(PointerEventData eventData)
+    {
+        if (!leftClick) // 우클릭시에만
+        {
+            leftClick = true;
+            return;
+        } 
+        Vector3 endPos = _targetTr.localPosition;
+
+        if (endPos.x > _inventoryRect.xMax || endPos.x < _inventoryRect.xMin ||
+            endPos.y > _inventoryRect.yMax || endPos.y < _inventoryRect.yMin)
+        {
+            // 막자 일단 사용자 공격
+            itemDrop();
+        }
+
+
+        else
+        {
+            itemIn();
+        }
+
+
+    }
+
+    public void itemDrop()
+    {
+        Debug.Log("범위 밖");
+
+        _dropItemCV.alpha = 1;
+        _dropItemCV.blocksRaycasts = true;
+        _dropNumber.text = "1";
+
+        // 회귀
+        itemRecycle();
+    }
+
+    public void _dropOk(int _count)
+    {
+        Debug.Log(_count);
+    }
+
+    public void itemIn()
+    {
+        Debug.Log("범위 안");
+
+
+
+        // 회귀
+        itemRecycle();
+    }
+
+    public void itemRecycle()
+    {
+
+        // 시작 포인트로 회귀
+        _targetTr.position = _beginPoint;
+
+        // 부모 안으로 다시 회귀
+        _targetTr.SetParent(_curParent);
+
+        // 원래 순서대로 회귀
+        _targetTr.SetSiblingIndex(idx);
+    }
+
+    #endregion
+    public int getindex() => transform.GetSiblingIndex();
+}
